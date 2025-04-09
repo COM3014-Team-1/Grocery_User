@@ -148,12 +148,21 @@ def login():
 # get_user API to retrieve user info
 @auth_bp.route('/user/<int:user_id>', methods=['GET'])
 def get_user(user_id):
-    # Retrieve the user based on the provided user_id
+    """
+    Retrieve a user by their user_id.
+    """
     user = User.query.get(user_id)
     if not user:
         return jsonify({"error": "User not found"}), 404
+    
     return jsonify({
-        "id": user.id,
-        "username": user.username,
-        "email": user.email
+        "user_id": user.user_id,
+        "name": user.name,
+        "email": user.email,
+        "phone": user.phone,
+        "address": user.address,
+        "city": user.city,
+        "state": user.state,
+        "zipcode": user.zipcode,
+        "created_at": user.created_at.isoformat()  # Convert datetime to ISO string
     }), 200
