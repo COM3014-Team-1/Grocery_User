@@ -13,6 +13,7 @@ def create_app():
 
     # Import models so migrations detect them
     from app.infrastructure.models.user import User
+    from app.infrastructure.models.event import SignUpEvent, LoginEvent
 
     # Import blueprints after extensions are initialized
     from app.api.auth import auth_bp
