@@ -2,17 +2,21 @@ import re
 from datetime import datetime, timedelta
 from flask.views import MethodView
 from flask_smorest import Blueprint, abort
-from flask import request, current_app, jsonify
-from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
-from app.schemas import RegisterSchema
+from flask import current_app
+from werkzeug.security import generate_password_hash, check_password_hash
+
 from app.extensions import db, limiter
 from app.infrastructure.models.user import User
+from app.schemas.register import RegisterSchema
+from app.schemas.login import LoginSchema
+from app.schemas.user import UserSchema
 
+# Regular expression for email validation
 EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
 
 def is_valid_email(email: str) -> bool:
-    return EMAIL_REGEX.fullmatch(email) is not None
+    return bool(EMAIL_REGEX.fullmatch(email))
 
 def is_valid_password(password: str) -> bool:
     if len(password) < 8:
@@ -53,36 +57,25 @@ def record_failed_attempt(identifier: str):
         if record["attempts"] >= LOCKOUT_THRESHOLD:
             record["locked_until"] = now + LOCKOUT_DURATION
     else:
-        failed_logins[identifier] = {
-            "attempts": 1,
-            "last_attempt": now,
-            "locked_until": None
-        }
+        failed_logins[identifier] = {"attempts": 1, "last_attempt": now, "locked_until": None}
 
 def reset_failed_attempts(identifier: str):
-    if identifier in failed_logins:
-        del failed_logins[identifier]
+    failed_logins.pop(identifier, None)
 
-# --------------------------------------
-# ✅ Flask-Smorest Blueprint
-# --------------------------------------
+# Initialize the Flask-Smorest blueprint
 blueprint = Blueprint("auth", "auth", url_prefix="/api/auth", description="Authentication routes")
 
-# --------------------------------------
-# 📌 Updated Register API including created_at field
-# --------------------------------------
-from app.schemas import RegisterSchema
-
-# ... your other imports remain the same ...
-
+# -------------------------
+# Registration API
+# -------------------------
 @blueprint.route("/register")
 class RegisterResource(MethodView):
     decorators = [limiter.limit("5 per minute")]
 
     @blueprint.arguments(RegisterSchema, location="json")
-    @blueprint.response(201)
+    @blueprint.response(201, UserSchema)
     def post(self, data):
-        # Map 'username' field from incoming data to model attribute (assuming your model uses 'name')
+        # Map incoming fields (using "username" as input, mapped to User.name)
         name = data.get("username", "").strip()
         email = data.get("email", "").strip()
         password = data.get("password", "")
@@ -92,22 +85,17 @@ class RegisterResource(MethodView):
         state = data.get("state", "").strip()
         zipcode = data.get("zipcode", "").strip()
 
-        # Check required fields.
+        # Validate required fields
         if not name or not email or not password:
             abort(400, message="Missing required fields (username, email, password).")
-
         if not is_valid_email(email):
             abort(400, message="Invalid email.")
-
         if not is_valid_password(password):
             abort(400, message="Weak password.")
-
         if User.query.filter((User.name == name) | (User.email == email)).first():
             abort(400, message="Username or email already taken.")
 
         hashed_password = generate_password_hash(password)
-        
-        # Create a new user (assuming your User model uses fields 'name', 'email', 'password_hash', etc.)
         new_user = User(
             name=name,
             email=email,
@@ -118,7 +106,6 @@ class RegisterResource(MethodView):
             state=state,
             zipcode=zipcode
         )
-
         db.session.add(new_user)
         db.session.commit()
 
@@ -136,4 +123,66 @@ class RegisterResource(MethodView):
                 "created_at": new_user.created_at.isoformat()
             }
         }
+    
+# -------------------------
+# Login API
+# -------------------------
+@blueprint.route("/login")
+class LoginResource(MethodView):
+    decorators = [limiter.limit("5 per minute")]
 
+    @blueprint.arguments(LoginSchema, location="json")
+    @blueprint.response(200)
+    def post(self, data):
+        identifier = data.get("identifier", "").strip()
+        password = data.get("password", "")
+
+        if not identifier or not password:
+            abort(400, message="Missing credentials.")
+
+        locked, message = is_account_locked(identifier)
+        if locked:
+            abort(403, message=message)
+
+        user = User.query.filter((User.name == identifier) | (User.email == identifier)).first()
+        if not user or not check_password_hash(user.password_hash, password):
+            record_failed_attempt(identifier)
+            abort(401, message="Invalid credentials.")
+        reset_failed_attempts(identifier)
+
+        secret = current_app.config.get("SECRET_KEY")
+        if not secret:
+            abort(500, message="Server configuration error.")
+
+        token = jwt.encode({
+            "user_id": user.user_id,
+            "exp": datetime.utcnow() + timedelta(hours=1)
+        }, secret, algorithm="HS256")
+
+        return {
+            "message": "Login successful.",
+            "token": token,
+            "user": {
+                "user_id": user.user_id,
+                "name": user.name,
+                "email": user.email,
+                "phone": user.phone,
+                "address": user.address,
+                "city": user.city,
+                "state": user.state,
+                "zipcode": user.zipcode,
+                "created_at": user.created_at.isoformat()
+            }
+        }
+    
+# -------------------------
+# Get User Info API
+# -------------------------
+@blueprint.route("/user/<int:user_id>")
+class UserResource(MethodView):
+    @blueprint.response(200, UserSchema)
+    def get(self, user_id):
+        user = User.query.get(user_id)
+        if not user:
+            abort(404, message="User not found.")
+        return user
