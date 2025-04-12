@@ -1,3 +1,5 @@
+from app.infrastructure.models.user import User
+from app.infrastructure.models.event import SignUpEvent, LoginEvent
 from flask import Flask
 from flask_smorest import Api
 from flask_cors import CORS
