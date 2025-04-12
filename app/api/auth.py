@@ -5,7 +5,7 @@ from flask_smorest import Blueprint, abort
 from flask import request, current_app, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
-
+from app.schemas import RegisterSchema
 from app.extensions import db, limiter
 from app.infrastructure.models.user import User
 
@@ -71,15 +71,19 @@ blueprint = Blueprint("auth", "auth", url_prefix="/api/auth", description="Authe
 # --------------------------------------
 # 📌 Updated Register API including created_at field
 # --------------------------------------
+from app.schemas import RegisterSchema
+
+# ... your other imports remain the same ...
+
 @blueprint.route("/register")
 class RegisterResource(MethodView):
     decorators = [limiter.limit("5 per minute")]
 
-    @blueprint.arguments(dict, location="json")
+    @blueprint.arguments(RegisterSchema, location="json")
     @blueprint.response(201)
     def post(self, data):
-        # Extract and clean fields from the incoming JSON data.
-        name = data.get("username", "").strip()  # Mapping 'username' field to the 'name' attribute in the model.
+        # Map 'username' field from incoming data to model attribute (assuming your model uses 'name')
+        name = data.get("username", "").strip()
         email = data.get("email", "").strip()
         password = data.get("password", "")
         phone = data.get("phone", "").strip()
@@ -101,10 +105,9 @@ class RegisterResource(MethodView):
         if User.query.filter((User.name == name) | (User.email == email)).first():
             abort(400, message="Username or email already taken.")
 
-        # Hash the password.
         hashed_password = generate_password_hash(password)
         
-        # Create a new user record. Note: created_at is automatically set via the default in the model.
+        # Create a new user (assuming your User model uses fields 'name', 'email', 'password_hash', etc.)
         new_user = User(
             name=name,
             email=email,
@@ -119,7 +122,6 @@ class RegisterResource(MethodView):
         db.session.add(new_user)
         db.session.commit()
 
-        # Return the created user info, including the created_at timestamp.
         return {
             "message": "User registered successfully.",
             "user": {
@@ -131,6 +133,7 @@ class RegisterResource(MethodView):
                 "city": new_user.city,
                 "state": new_user.state,
                 "zipcode": new_user.zipcode,
-                "created_at": new_user.created_at.isoformat()  # Format datetime as an ISO string.
+                "created_at": new_user.created_at.isoformat()
             }
         }
+
