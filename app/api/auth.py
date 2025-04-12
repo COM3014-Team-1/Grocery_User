@@ -69,7 +69,7 @@ def reset_failed_attempts(identifier: str):
 blueprint = Blueprint("auth", "auth", url_prefix="/api/auth", description="Authentication routes")
 
 # --------------------------------------
-# 📌 Register API - Updated to include additional fields
+# 📌 Updated Register API including created_at field
 # --------------------------------------
 @blueprint.route("/register")
 class RegisterResource(MethodView):
@@ -78,8 +78,8 @@ class RegisterResource(MethodView):
     @blueprint.arguments(dict, location="json")
     @blueprint.response(201)
     def post(self, data):
-        # Extract and clean fields from the request
-        name = data.get("username", "").strip()  # Mapping 'username' to User.name
+        # Extract and clean fields from the incoming JSON data.
+        name = data.get("username", "").strip()  # Mapping 'username' field to the 'name' attribute in the model.
         email = data.get("email", "").strip()
         password = data.get("password", "")
         phone = data.get("phone", "").strip()
@@ -88,7 +88,7 @@ class RegisterResource(MethodView):
         state = data.get("state", "").strip()
         zipcode = data.get("zipcode", "").strip()
 
-        # Verify required fields
+        # Check required fields.
         if not name or not email or not password:
             abort(400, message="Missing required fields (username, email, password).")
 
@@ -101,10 +101,10 @@ class RegisterResource(MethodView):
         if User.query.filter((User.name == name) | (User.email == email)).first():
             abort(400, message="Username or email already taken.")
 
-        # Hash the password
+        # Hash the password.
         hashed_password = generate_password_hash(password)
-
-        # Create a new user record with additional fields
+        
+        # Create a new user record. Note: created_at is automatically set via the default in the model.
         new_user = User(
             name=name,
             email=email,
@@ -119,6 +119,7 @@ class RegisterResource(MethodView):
         db.session.add(new_user)
         db.session.commit()
 
+        # Return the created user info, including the created_at timestamp.
         return {
             "message": "User registered successfully.",
             "user": {
@@ -130,86 +131,6 @@ class RegisterResource(MethodView):
                 "city": new_user.city,
                 "state": new_user.state,
                 "zipcode": new_user.zipcode,
-                "created_at": new_user.created_at.isoformat()
+                "created_at": new_user.created_at.isoformat()  # Format datetime as an ISO string.
             }
-        }
-
-# --------------------------------------
-# 📌 Login API 
-# --------------------------------------
-@blueprint.route("/login")
-class LoginResource(MethodView):
-    decorators = [limiter.limit("5 per minute")]
-
-    @blueprint.arguments(dict, location="json")
-    @blueprint.response(200)
-    def post(self, data):
-        identifier = data.get("username") or data.get("email", "").strip()
-        password = data.get("password", "")
-
-        if not identifier or not password:
-            abort(400, message="Missing credentials.")
-
-        locked, message = is_account_locked(identifier)
-        if locked:
-            abort(403, message=message)
-
-        user = User.query.filter((User.name == identifier) | (User.email == identifier)).first()
-        if not user or not check_password_hash(user.password_hash, password):
-            record_failed_attempt(identifier)
-            abort(401, message="Invalid credentials.")
-
-        reset_failed_attempts(identifier)
-
-        secret = current_app.config.get("SECRET_KEY")
-        if not secret:
-            abort(500, message="Server configuration error.")
-
-        token = jwt.encode({
-            "user_id": user.user_id,
-            "exp": datetime.utcnow() + timedelta(hours=1)
-        }, secret, algorithm="HS256")
-
-        return {
-            "message": "Login successful",
-            "token": token,
-            "user": {
-                "user_id": user.user_id,
-                "name": user.name,
-                "email": user.email
-            }
-        }
-
-# --------------------------------------
-# 👤 Get User Info API
-# --------------------------------------
-@blueprint.route("/user/<int:user_id>")
-class UserResource(MethodView):
-
-    @blueprint.response(200, example={
-        "user_id": 1,
-        "name": "John Doe",
-        "email": "john@example.com",
-        "phone": "1234567890",
-        "address": "123 Main St",
-        "city": "New York",
-        "state": "NY",
-        "zipcode": "10001",
-        "created_at": "2024-04-10T10:00:00"
-    })
-    def get(self, user_id):
-        user = User.query.get(user_id)
-        if not user:
-            abort(404, message="User not found.")
-
-        return {
-            "user_id": user.user_id,
-            "name": user.name,
-            "email": user.email,
-            "phone": user.phone,
-            "address": user.address,
-            "city": user.city,
-            "state": user.state,
-            "zipcode": user.zipcode,
-            "created_at": user.created_at.isoformat()
         }
