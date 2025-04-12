@@ -18,27 +18,22 @@ class RegisterSchema(Schema):
     )
     phone = fields.Str(
         required=True,
-        missing="",
         description="User's phone number"
     )
     address = fields.Str(
         required=True,
-        missing="",
         description="User's address"
     )
     city = fields.Str(
         required=True,
-        missing="",
         description="User's city"
     )
     state = fields.Str(
         required=True,
-        missing="",
         description="User's state"
     )
     zipcode = fields.Str(
         required=True,
-        missing="",
         description="User's zipcode"
     )
     created_at = fields.DateTime(
