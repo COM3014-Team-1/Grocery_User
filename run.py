@@ -16,4 +16,5 @@ def db_init():
 
 # Run the app or migrations if needed
 if __name__ == "__main__":
-    app.run(debug=True)
+    app.run(debug=True, host="0.0.0.0", port=5002)
+

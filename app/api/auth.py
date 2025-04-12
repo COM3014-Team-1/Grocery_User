@@ -1,6 +1,8 @@
 import re
 from datetime import datetime, timedelta
-from flask import Blueprint, request, jsonify, current_app
+from flask.views import MethodView
+from flask_smorest import Blueprint, abort
+from flask import request, current_app, jsonify
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
 
@@ -25,6 +27,7 @@ def is_valid_password(password: str) -> bool:
         return False
     return True
 
+# Brute-force lockout logic
 failed_logins = {}
 LOCKOUT_THRESHOLD = 3
 LOCKOUT_DURATION = timedelta(minutes=15)
@@ -36,7 +39,6 @@ def is_account_locked(identifier: str) -> tuple[bool, str]:
     if record and record.get("locked_until") and record["locked_until"] > now:
         remaining = (record["locked_until"] - now).seconds // 60 + 1
         return True, f"Account locked. Try again in {remaining} minutes."
-    return False, ""
     return False, ""
 
 def record_failed_attempt(identifier: str):
@@ -61,108 +63,153 @@ def reset_failed_attempts(identifier: str):
     if identifier in failed_logins:
         del failed_logins[identifier]
 
-auth_bp = Blueprint('auth', __name__, url_prefix='/api/auth')
+# --------------------------------------
+# ✅ Flask-Smorest Blueprint
+# --------------------------------------
+blueprint = Blueprint("auth", "auth", url_prefix="/api/auth", description="Authentication routes")
 
-@auth_bp.route('/register', methods=['POST'])
-@limiter.limit("5 per minute")
-def register():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No input data provided"}), 400
+# --------------------------------------
+# 📌 Register API - Updated to include additional fields
+# --------------------------------------
+@blueprint.route("/register")
+class RegisterResource(MethodView):
+    decorators = [limiter.limit("5 per minute")]
 
-    username = data.get('username', '').strip()
-    email = data.get('email', '').strip()
-    password = data.get('password', '')
+    @blueprint.arguments(dict, location="json")
+    @blueprint.response(201)
+    def post(self, data):
+        # Extract and clean fields from the request
+        name = data.get("username", "").strip()  # Mapping 'username' to User.name
+        email = data.get("email", "").strip()
+        password = data.get("password", "")
+        phone = data.get("phone", "").strip()
+        address = data.get("address", "").strip()
+        city = data.get("city", "").strip()
+        state = data.get("state", "").strip()
+        zipcode = data.get("zipcode", "").strip()
 
-    if not username or not email or not password:
-        return jsonify({"error": "Missing required fields (username, email, password)"}), 400
+        # Verify required fields
+        if not name or not email or not password:
+            abort(400, message="Missing required fields (username, email, password).")
 
-    if not is_valid_email(email):
-        return jsonify({"error": "Invalid email address"}), 400
+        if not is_valid_email(email):
+            abort(400, message="Invalid email.")
 
-    if not is_valid_password(password):
-        return jsonify({"error": "Password must be at least 8 characters and contain uppercase, lowercase, digits, and special characters."}), 400
+        if not is_valid_password(password):
+            abort(400, message="Weak password.")
 
-    if User.query.filter((User.username == username) | (User.email == email)).first():
-        return jsonify({"error": "User with provided username or email already exists"}), 400
+        if User.query.filter((User.name == name) | (User.email == email)).first():
+            abort(400, message="Username or email already taken.")
 
-    hashed_password = generate_password_hash(password)
-    new_user = User(username=username, email=email, password=hashed_password)
-    db.session.add(new_user)
-    db.session.commit()
+        # Hash the password
+        hashed_password = generate_password_hash(password)
 
-    return jsonify({
-        "message": "User registered successfully",
-        "user": {
-            "id": new_user.id,
-            "username": new_user.username,
-            "email": new_user.email
+        # Create a new user record with additional fields
+        new_user = User(
+            name=name,
+            email=email,
+            password_hash=hashed_password,
+            phone=phone,
+            address=address,
+            city=city,
+            state=state,
+            zipcode=zipcode
+        )
+
+        db.session.add(new_user)
+        db.session.commit()
+
+        return {
+            "message": "User registered successfully.",
+            "user": {
+                "user_id": new_user.user_id,
+                "name": new_user.name,
+                "email": new_user.email,
+                "phone": new_user.phone,
+                "address": new_user.address,
+                "city": new_user.city,
+                "state": new_user.state,
+                "zipcode": new_user.zipcode,
+                "created_at": new_user.created_at.isoformat()
+            }
         }
-    }), 201
 
-@auth_bp.route('/login', methods=['POST'])
-@limiter.limit("5 per minute")
-def login():
-    data = request.get_json()
-    if not data:
-        return jsonify({"error": "No input data provided"}), 400
+# --------------------------------------
+# 📌 Login API 
+# --------------------------------------
+@blueprint.route("/login")
+class LoginResource(MethodView):
+    decorators = [limiter.limit("5 per minute")]
 
-    identifier = data.get('username') or data.get('email', '').strip()
-    password = data.get('password', '')
+    @blueprint.arguments(dict, location="json")
+    @blueprint.response(200)
+    def post(self, data):
+        identifier = data.get("username") or data.get("email", "").strip()
+        password = data.get("password", "")
 
-    if not identifier or not password:
-        return jsonify({"error": "Missing required fields (identifier and password)"}), 400
+        if not identifier or not password:
+            abort(400, message="Missing credentials.")
 
-    locked, message = is_account_locked(identifier)
-    if locked:
-        return jsonify({"error": message}), 403
+        locked, message = is_account_locked(identifier)
+        if locked:
+            abort(403, message=message)
 
-    user = User.query.filter((User.username == identifier) | (User.email == identifier)).first()
-    if not user or not check_password_hash(user.password, password):
-        record_failed_attempt(identifier)
-        return jsonify({"error": "Invalid credentials"}), 401
+        user = User.query.filter((User.name == identifier) | (User.email == identifier)).first()
+        if not user or not check_password_hash(user.password_hash, password):
+            record_failed_attempt(identifier)
+            abort(401, message="Invalid credentials.")
 
-    reset_failed_attempts(identifier)
+        reset_failed_attempts(identifier)
 
-    secret = current_app.config.get("SECRET_KEY")
-    if not secret:
-        return jsonify({"error": "Server configuration error: SECRET_KEY not set"}), 500
+        secret = current_app.config.get("SECRET_KEY")
+        if not secret:
+            abort(500, message="Server configuration error.")
 
-    token = jwt.encode({
-        'user_id': user.id,
-        'exp': datetime.utcnow() + timedelta(hours=1)
-    }, secret, algorithm="HS256")
+        token = jwt.encode({
+            "user_id": user.user_id,
+            "exp": datetime.utcnow() + timedelta(hours=1)
+        }, secret, algorithm="HS256")
 
-    return jsonify({
-        "message": "Login successful",
-        "token": token,
-        "user": {
-            "id": user.id,
-            "username": user.username,
-            "email": user.email
+        return {
+            "message": "Login successful",
+            "token": token,
+            "user": {
+                "user_id": user.user_id,
+                "name": user.name,
+                "email": user.email
+            }
         }
-    }), 200
 
+# --------------------------------------
+# 👤 Get User Info API
+# --------------------------------------
+@blueprint.route("/user/<int:user_id>")
+class UserResource(MethodView):
 
+    @blueprint.response(200, example={
+        "user_id": 1,
+        "name": "John Doe",
+        "email": "john@example.com",
+        "phone": "1234567890",
+        "address": "123 Main St",
+        "city": "New York",
+        "state": "NY",
+        "zipcode": "10001",
+        "created_at": "2024-04-10T10:00:00"
+    })
+    def get(self, user_id):
+        user = User.query.get(user_id)
+        if not user:
+            abort(404, message="User not found.")
 
-# get_user API to retrieve user info
-@auth_bp.route('/user/<int:user_id>', methods=['GET'])
-def get_user(user_id):
-    """
-    Retrieve a user by their user_id.
-    """
-    user = User.query.get(user_id)
-    if not user:
-        return jsonify({"error": "User not found"}), 404
-    
-    return jsonify({
-        "user_id": user.user_id,
-        "name": user.name,
-        "email": user.email,
-        "phone": user.phone,
-        "address": user.address,
-        "city": user.city,
-        "state": user.state,
-        "zipcode": user.zipcode,
-        "created_at": user.created_at.isoformat()  # Convert datetime to ISO string
-    }), 200
+        return {
+            "user_id": user.user_id,
+            "name": user.name,
+            "email": user.email,
+            "phone": user.phone,
+            "address": user.address,
+            "city": user.city,
+            "state": user.state,
+            "zipcode": user.zipcode,
+            "created_at": user.created_at.isoformat()
+        }
