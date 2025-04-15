@@ -161,7 +161,7 @@ class LoginResource(MethodView):
             abort(500, message="Server configuration error.")
 
         token = jwt.encode({
-            "user_id": user.user_id,
+            "user_id": str(user.user_id),
             "exp": datetime.utcnow() + timedelta(hours=1)
         }, secret, algorithm="HS256")
 
@@ -184,7 +184,7 @@ class LoginResource(MethodView):
 # -------------------------
 # Get User Info API
 # -------------------------
-@blueprint.route("/user/<int:user_id>")
+@blueprint.route("/user/<uuid:user_id>")
 class UserResource(MethodView):
     @blueprint.response(200, UserSchema)
     def get(self, user_id):
