@@ -1,11 +1,13 @@
 # app/infrastructure/models/user.py
+import uuid
 from datetime import datetime
 from app.extensions import db
+from sqlalchemy.dialects.postgresql import UUID
 
 class User(db.Model):
-    __tablename__ = 'user'
+    __tablename__ = 'user' 
     
-    user_id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True, nullable=False)
     name = db.Column(db.String(255), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
     password_hash = db.Column(db.Text, nullable=False)
@@ -18,4 +20,5 @@ class User(db.Model):
 
     def __repr__(self):
         return f"<User {self.name}, {self.email}>"
+
 

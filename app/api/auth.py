@@ -5,12 +5,13 @@ from flask_smorest import Blueprint, abort
 import jwt
 from flask import current_app
 from werkzeug.security import generate_password_hash, check_password_hash
-
 from app.extensions import db, limiter
 from app.infrastructure.models.user import User
 from app.schemas.register import RegisterSchema
 from app.schemas.login import LoginSchema
 from app.schemas.user import UserSchema
+from flask import jsonify
+
 
 # Regular expression for email validation
 EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
@@ -92,9 +93,10 @@ class RegisterResource(MethodView):
             abort(400, message="Invalid email.")
         if not is_valid_password(password):
             abort(400, message="Weak password.")
-        if User.query.filter((User.name == name) | (User.email == email)).first():
+        if User.query.filter(User.email == email).first():
             abort(400, message="Username or email already taken.")
 
+        # Create the user and store in the database
         hashed_password = generate_password_hash(password)
         new_user = User(
             name=name,
@@ -109,10 +111,11 @@ class RegisterResource(MethodView):
         db.session.add(new_user)
         db.session.commit()
 
-        return {
+        # Construct the response
+        user_response = {
             "message": "User registered successfully.",
             "user": {
-                "user_id": new_user.user_id,
+                "user_id": str(new_user.user_id),
                 "name": new_user.name,
                 "email": new_user.email,
                 "phone": new_user.phone,
@@ -123,6 +126,9 @@ class RegisterResource(MethodView):
                 "created_at": new_user.created_at.isoformat()
             }
         }
+        
+        # Return the response using jsonify 
+        return jsonify(user_response), 201
     
 # -------------------------
 # Login API

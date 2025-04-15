@@ -1,12 +1,15 @@
 # app/infrastructure/models/event.py
+import uuid
 from datetime import datetime
 from app.extensions import db
+from sqlalchemy.dialects.postgresql import UUID
 
 class SignUpEvent(db.Model):
     __tablename__ = "signup_events"
-    id = db.Column(db.Integer, primary_key=True)
-    # Update the foreign key reference to point to user.user_id
-    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    # Use UUID for the primary key
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True, nullable=False)
+    # Update foreign key to reference the updated users table and its UUID key
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("user.user_id"), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def __repr__(self):
@@ -14,12 +17,13 @@ class SignUpEvent(db.Model):
 
 class LoginEvent(db.Model):
     __tablename__ = "login_events"
-    id = db.Column(db.Integer, primary_key=True)
-    # Update the foreign key reference to point to user.user_id
-    user_id = db.Column(db.Integer, db.ForeignKey("user.user_id"), nullable=False)
+    # Similarly using UUID for the primary key for the login event model
+    id = db.Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4, unique=True, nullable=False)
+    user_id = db.Column(UUID(as_uuid=True), db.ForeignKey("user.user_id"), nullable=False)
     timestamp = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     success = db.Column(db.Boolean, nullable=False)
 
     def __repr__(self):
         return f"<LoginEvent user_id={self.user_id} success={self.success} timestamp={self.timestamp}>"
+
 
