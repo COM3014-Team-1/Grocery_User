@@ -1,7 +1,7 @@
 from marshmallow import Schema, fields
 
 class UserSchema(Schema):
-    user_id = fields.Int(dump_only=True, description="User primary key")
+    user_id = fields.UUID(dump_only=True, description="User primary key")
     username = fields.Str(dump_only=True, attribute="name", description="User's full name")
     email = fields.Email(dump_only=True, description="User's email address")
     phone = fields.Str(dump_only=True, description="User's phone number")
