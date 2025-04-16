@@ -198,7 +198,7 @@ class UserResource(MethodView):
 # -------------------------
 @blueprint.route("/user/<uuid:user_id>/edit")
 class EditUserResource(MethodView):
-    @blueprint.arguments(EditUserSchema, location="json", partial=True)
+    @blueprint.arguments(EditUserSchema(partial=True), location="json")
     @blueprint.response(200, UserSchema)
     def put(self, data, user_id):
         user = User.query.get(user_id)
