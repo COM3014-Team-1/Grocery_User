@@ -160,10 +160,13 @@ class LoginResource(MethodView):
         if not secret:
             abort(500, message="Server configuration error.")
 
-        token = jwt.encode({
-            "user_id": str(user.user_id),
-            "exp": datetime.utcnow() + timedelta(hours=1)
-        }, secret, algorithm="HS256")
+        token_payload = {
+            "sub": str(user.user_id),                   # Pass user_id as string to "sub"
+            "user_id": str(user.user_id),               # Pass user_id as string
+            "roles": ["user"],                          # Define roles as an array containing "user"
+            "exp": int((datetime.utcnow() + timedelta(hours=8)).timestamp())  # Expiration time as Unix timestamp
+        }
+        token = jwt.encode(token_payload, secret, algorithm="HS256")
 
         return {
             "message": "Login successful.",
