@@ -11,7 +11,7 @@ from app.schemas.register import RegisterSchema
 from app.schemas.login import LoginSchema
 from app.schemas.user import UserSchema
 from flask import jsonify
-
+from app.schemas.edit_user import EditUserSchema
 
 # Regular expression for email validation
 EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
@@ -191,4 +191,33 @@ class UserResource(MethodView):
         user = User.query.get(user_id)
         if not user:
             abort(404, message="User not found.")
+        return user
+    
+# -------------------------
+# Edit User API
+# -------------------------
+@blueprint.route("/user/<uuid:user_id>/edit")
+class EditUserResource(MethodView):
+    @blueprint.arguments(EditUserSchema, location="json", partial=True)
+    @blueprint.response(200, UserSchema)
+    def put(self, data, user_id):
+        user = User.query.get(user_id)
+        if not user:
+            abort(404, message="User not found.")
+        # Update fields if provided
+        if "username" in data:
+            user.name = data.get("username")
+        if "email" in data:
+            user.email = data.get("email")
+        if "phone" in data:
+            user.phone = data.get("phone")
+        if "address" in data:
+            user.address = data.get("address")
+        if "city" in data:
+            user.city = data.get("city")
+        if "state" in data:
+            user.state = data.get("state")
+        if "zipcode" in data:
+            user.zipcode = data.get("zipcode")
+        db.session.commit()
         return user
