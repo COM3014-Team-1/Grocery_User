@@ -1,20 +1,25 @@
-# Use an updated Python 3.9 slim image
 FROM python:3.9-slim-bullseye
+
+# Prevent Python from writing pyc files and buffer stdout/stderr
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
 
 # Set working directory
 WORKDIR /app
 
-# Install system dependencies (update as necessary for your packages)
-RUN apt-get update && apt-get install -y \
+# Install system dependencies
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
     build-essential \
-    libpq-dev \
-    && rm -rf /var/lib/apt/lists/*
+    libpq-dev && \
+    rm -rf /var/lib/apt/lists/*
 
-# Copy requirements file
-COPY requirements.txt requirements.txt
+# Copy only requirements first to leverage cached layers
+COPY requirements.txt .
 
 # Upgrade pip and install Python dependencies
-RUN pip install --upgrade pip && pip install -r requirements.txt
+RUN pip install --upgrade pip && \
+    pip install -r requirements.txt
 
 # Copy the rest of the application code
 COPY . .
