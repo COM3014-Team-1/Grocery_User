@@ -1,7 +1,5 @@
 import os
 
-import os
-
 class Config:
     SECRET_KEY = os.environ.get('SECRET_KEY', 'your-very-secret-key')
     # Update the URL with new PostgreSQL user "htetaung" and database "user_profiles"
