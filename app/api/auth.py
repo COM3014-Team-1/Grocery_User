@@ -12,7 +12,7 @@ from app.schemas.login import LoginSchema
 from app.schemas.user import UserSchema
 from flask import jsonify
 from app.schemas.edit_user import EditUserSchema
-
+from flask import request
 # Regular expression for email validation
 EMAIL_REGEX = re.compile(r"[^@]+@[^@]+\.[^@]+")
 
@@ -31,6 +31,25 @@ def is_valid_password(password: str) -> bool:
     if not re.search(r"(?=.*[^\w\s])", password):
         return False
     return True
+
+def _get_token_payload():
+    """Decode the JWT from the Authorization header and return its payload."""
+    auth_header = request.headers.get("Authorization", "")
+    if not auth_header:
+        abort(401, message="Missing Authorization Header")
+    # Expect header in format "Bearer <token>"
+    parts = auth_header.split()
+    if len(parts) != 2 or parts[0].lower() != "bearer":
+        abort(401, message="Invalid Authorization header format")
+    token = parts[1]
+    secret = current_app.config.get("SECRET_KEY")
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
+        return payload
+    except jwt.ExpiredSignatureError:
+        abort(401, message="Token expired")
+    except jwt.InvalidTokenError:
+        abort(401, message="Invalid token")
 
 # Brute-force lockout logic
 failed_logins = {}
@@ -191,6 +210,9 @@ class LoginResource(MethodView):
 class UserResource(MethodView):
     @blueprint.response(200, UserSchema)
     def get(self, user_id):
+        payload = _get_token_payload()
+        if payload.get("user_id") != str(user_id):
+            abort(403, message="Forbidden: cannot access other user's data.")
         user = User.query.get(user_id)
         if not user:
             abort(404, message="User not found.")
@@ -204,23 +226,19 @@ class EditUserResource(MethodView):
     @blueprint.arguments(EditUserSchema(partial=True), location="json")
     @blueprint.response(200, UserSchema)
     def put(self, data, user_id):
+        payload = _get_token_payload()
+        if payload.get("user_id") != str(user_id):
+            abort(403, message="Forbidden: cannot edit other user's data.")
         user = User.query.get(user_id)
         if not user:
             abort(404, message="User not found.")
-        # Update fields if provided
+        # Update allowed fields
         if "username" in data:
-            user.name = data.get("username")
+            user.name = data["username"]
         if "email" in data:
-            user.email = data.get("email")
-        if "phone" in data:
-            user.phone = data.get("phone")
-        if "address" in data:
-            user.address = data.get("address")
-        if "city" in data:
-            user.city = data.get("city")
-        if "state" in data:
-            user.state = data.get("state")
-        if "zipcode" in data:
-            user.zipcode = data.get("zipcode")
+            user.email = data["email"]
+        for field in ("phone", "address", "city", "state", "zipcode"):  
+            if field in data:
+                setattr(user, field, data[field])
         db.session.commit()
         return user
