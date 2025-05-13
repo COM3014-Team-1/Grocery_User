@@ -4,37 +4,16 @@ services:
   web:
     build: .
     container_name: flask_app
-    command: python run.py
     restart: unless-stopped
+    command: python run.py
     ports:
       - "5002:5002"
     environment:
       - FLASK_APP=run.py
       - FLASK_ENV=development
-      - DATABASE_URL=postgresql://htetaung:password@db:5432/user_profiles
-      - SECRET_KEY=your-production-secret  # Set this to a strong secret key
-    depends_on:
-      db:
-        condition: service_healthy
+      # Point at your AWS RDS instance instead of local Docker DB
+      - DATABASE_URL=postgresql://postgres:SHMIgtBBk1zQKYhMSmDX@database-1.c3u0oys8ik2c.eu-west-2.rds.amazonaws.com:5432/<AWS_DB_NAME>
+      - SECRET_KEY=${SECRET_KEY:-change-me}
+    # No more local db → remove depends_on
 
-  db:
-    image: postgres:13
-    container_name: postgres_db
-    restart: unless-stopped
-    environment:
-      POSTGRES_DB: user_profiles
-      POSTGRES_USER: htetaung
-      POSTGRES_PASSWORD: password
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5433:5432"
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U htetaung -d user_profiles"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  pgdata:
 
