@@ -4,8 +4,8 @@ services:
   web:
     build: .
     container_name: flask_app
-    command: python run.py
     restart: unless-stopped
+    command: python run.py
     ports:
       - "5002:5002"
     environment:
