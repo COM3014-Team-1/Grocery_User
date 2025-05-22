@@ -11,7 +11,7 @@ services:
     environment:
       - FLASK_APP=run.py
       - FLASK_ENV=development
-      - DATABASE_URL=postgresql://postgres:SHMIgtBBk1zQKYhMSmDX@database-1.c3u0oys8ik2c.eu-west-2.rds.amazonaws.com:5432/user_profiles
+      - DATABASE_URL=postgresql://USERNAME:PASSWORD@HOST:PORT/user_profiles
       - SECRET_KEY=GT6kS1_ascJ2lv8LvL-QIiXGzsBjJvGmFJri5YmKQU6wBamEn3kVjN4YsyTKBTQlH-vz--tLRi-HqToRuHHWeQ==  # Set this to a strong secret key
     depends_on:
       db:
@@ -23,8 +23,8 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_DB: user_profiles
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: SHMIgtBBk1zQKYhMSmDX
+      POSTGRES_USER: USERNAME
+      POSTGRES_PASSWORD: PASSWORD
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
